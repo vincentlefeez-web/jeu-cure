@@ -58,6 +58,14 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--coral);outline-
 .badge.on{background:light-dark(#fff,#3a2f55);color:var(--ink);box-shadow:inset 0 0 0 2px var(--mint)}
 label{display:block;font-size:14px;font-weight:700;margin:8px 0 4px}
 input{width:100%;font:16px Nunito;padding:10px 12px;border-radius:12px;border:2px solid var(--path);background:light-dark(#fff,#1d1430);color:var(--ink);min-height:44px}
+select{width:100%;font:16px Nunito;padding:10px 12px;border-radius:12px;border:2px solid var(--path);background:light-dark(#fff,#1d1430);color:var(--ink);min-height:44px}
+.items{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:6px;font-size:14px}
+.items li{background:light-dark(#fff,#1d1430);border-radius:12px;padding:8px 10px}
+.items b{display:block}
+.prise{background:light-dark(#fff,#1d1430);border-radius:16px;padding:10px 14px;text-align:left;font-size:15px}
+.prise strong{font-family:Fredoka;font-size:18px;display:block}
+.tline{display:flex;gap:10px;align-items:center}.tline label{flex:1;margin:8px 0 0}.tline input{width:120px;flex:none}
+.order{display:inline-flex;align-items:center;justify-content:center;font:600 18px Fredoka;background:var(--mint);color:#fff;border-radius:16px;min-height:48px;padding:10px 18px;text-decoration:none}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .row button{flex:1;font-size:15px}
 .note{font-size:13px;color:var(--soft);margin:10px 0 0}
@@ -87,6 +95,7 @@ input{width:100%;font:16px Nunito;padding:10px 12px;border-radius:12px;border:2p
   <div class="board">
     <div class="map" id="map"><svg id="path"></svg></div>
     <div class="action">
+      <div class="prise" id="prise"></div>
       <div class="dots" id="dots"></div>
       <button class="big" id="take">J'ai pris ma dose</button>
       <p class="msg" id="msg"></p>
@@ -97,12 +106,15 @@ input{width:100%;font:16px Nunito;padding:10px 12px;border-radius:12px;border:2p
     <div class="panel"><h2>Trophées</h2><div class="badges" id="badges"></div></div>
     <div class="panel">
       <h2>Ma cure</h2>
-      <label for="pName">Produit</label><input id="pName">
-      <label for="pDays">Durée (jours)</label><input id="pDays" type="number" min="3" max="120">
-      <label for="pTimes">Heures des prises</label><input id="pTimes" placeholder="08:00, 20:00">
+      <label for="pPack">Pack Wake Up</label><select id="pPack"></select>
+      <ul class="items" id="pItems"></ul>
+      <div id="customBox"><label for="pName">Nom de la cure</label><input id="pName">
+      <label for="pDays">Durée (jours)</label><input id="pDays" type="number" min="3" max="120"></div>
+      <div id="pTimes"></div>
+      <label for="pLink">Mon lien de commande</label><input id="pLink" type="url" placeholder="https://boutique.wakeup-time.com/...">
       <div class="row"><button id="save">Enregistrer</button><button id="reset">Recommencer</button></div>
       <div class="row"><button id="skip">Mode démo : jour suivant</button></div>
-      <p class="note">Prototype : les rappels s'affichent ici quand l'appli est ouverte. Les vraies notifications sur le téléphone viendront avec la version installable.</p>
+      <p class="note">Doses et durées reprises de la boutique Wake Up (novembre 2026) : se référer aussi à l'étiquette de chaque produit. Les rappels s'affichent quand l'appli est ouverte.</p>
     </div>
   </div>
 </div>
@@ -112,31 +124,57 @@ input{width:100%;font:16px Nunito;padding:10px 12px;border-radius:12px;border:2p
     <polygon points="60,8 72,44 110,44 79,66 90,104 60,81 30,104 41,66 10,44 48,44"/></g>
     <polygon points="60,30 66,50 86,50 70,61 76,82 60,70 44,82 50,61 34,50 54,50" fill="#ffd23f"/></svg>
   <h2 id="mTitle"></h2><p id="mTxt"></p>
-  <div class="row" id="mRow"></div>
+  <div class="row" id="mRow"></div><p id="mLink"></p>
 </div></div>
 
 <script>
 {
-const KEY='cureQuest1';
+const KEY='cureQuest2';
+const SHOP='https://boutique.wakeup-time.com/fr/Catalogue/2-sante-cellulaire-s-you/2-0/';
+// Produits Wake Up S&You : doses lues sur les fiches de la boutique (novembre 2026)
+const PROD={
+  phyco:{n:'Phycocyanine',d:'10 ml (2 c. à café), pur ou dilué',m:'matin'},
+  phycoI:{n:'Phycocyanine Intense',d:'10 ml (2 c. à café), pur ou dilué',m:'matin'},
+  vitc:{n:'Vitamine C liposomale',d:'5 ml avant le repas, flacon agité',m:'matin'},
+  omega:{n:'Oméga 3 · Vit D3 · Astaxanthine',d:'2 capsules au dîner',m:'soir'},
+  curcu:{n:'Curcu8-Q10',d:'10 ml après le repas, dilué dans de l\'eau ou du jus',m:'midi'},
+  libre:{n:'Mon produit',d:'la dose indiquée sur l\'étiquette',m:'matin'}
+};
+const PACKS=[
+  {id:'energie',n:'Pack Énergie',days:60,price:'144,00 €',items:['phyco','vitc'],url:'9-pack-energie'},
+  {id:'pf',n:'Pack Pur Form',days:30,price:'113,00 €',items:['phyco','vitc','omega'],url:'10-pack-pur-form'},
+  {id:'pf2',n:'Pack Pur Form+',days:60,price:'214,20 €',items:['phyco','vitc','omega'],url:'11-pack-pur-form'},
+  {id:'pp',n:'Pack Pur Puissance',days:30,price:'169,70 €',items:['phyco','vitc','omega','curcu'],url:'21-pack-pur-puissance'},
+  {id:'pp2',n:'Pack Pur Puissance+',days:60,price:'267,85 €',items:['phyco','vitc','omega','curcu'],url:'20-pack-pur-puissance'},
+  {id:'pfi',n:'Pack Pur Form Intense+',days:60,price:'297,90 €',items:['phycoI','vitc','omega'],url:'71-pack-pur-form-intense'},
+  {id:'ppi',n:'Pack Pur Puissance Intense+',days:60,price:'351,55 €',items:['phycoI','vitc','omega','curcu'],url:'72-pack-pur-puissance-intense'},
+  {id:'libre',n:'Cure libre',days:21,price:'',items:['libre'],url:''}
+];
+const MOM=[['matin','Prise du matin','08:00'],['midi','Prise du midi','12:30'],['soir','Prise du soir','19:30']];
 const RANKS=[[0,'Apprenti'],[100,'Explorateur'],[250,'Guerrier'],[450,'Champion'],[700,'Légende']];
 const BADGES=[
-  {id:'first',t:'Premier pas',c:s=>s.done>=1,p:'M17 4l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z'},
-  {id:'w3',t:'3 jours de suite',c:s=>s.best>=3,p:'M17 4c4 6 8 9 8 15a8 8 0 0 1-16 0c0-4 3-6 4-9 1 3 2 4 4 5 0-4-1-7 0-11z'},
-  {id:'w7',t:'Semaine parfaite',c:s=>s.best>=7,p:'M8 6h18v6a9 9 0 0 1-18 0zM13 22h8v4h4v3H9v-3h4z'},
-  {id:'half',t:'Mi-parcours',c:s=>s.done>=Math.ceil(s.days/2),p:'M17 3a14 14 0 1 0 0 28 14 14 0 0 0 0-28zm0 3v22a11 11 0 0 1 0-22z'},
-  {id:'boss',t:'Cure terminée',c:s=>s.done>=s.days,p:'M5 26l3-15 6 6 3-11 3 11 6-6 3 15z'},
-  {id:'xp',t:'500 XP',c:s=>s.xp>=500,p:'M19 3L7 19h9l-2 12 12-16h-9z'}
+  {t:'Premier pas',c:s=>s.done>=1,p:'M17 4l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z'},
+  {t:'3 jours de suite',c:s=>s.best>=3,p:'M17 4c4 6 8 9 8 15a8 8 0 0 1-16 0c0-4 3-6 4-9 1 3 2 4 4 5 0-4-1-7 0-11z'},
+  {t:'Semaine parfaite',c:s=>s.best>=7,p:'M8 6h18v6a9 9 0 0 1-18 0zM13 22h8v4h4v3H9v-3h4z'},
+  {t:'Mi-parcours',c:s=>s.done>=Math.ceil(s.days/2),p:'M17 3a14 14 0 1 0 0 28 14 14 0 0 0 0-28zm0 3v22a11 11 0 0 1 0-22z'},
+  {t:'Cure terminée',c:s=>s.done>=s.days,p:'M5 26l3-15 6 6 3-11 3 11 6-6 3 15z'},
+  {t:'500 XP',c:s=>s.xp>=500,p:'M19 3L7 19h9l-2 12 12-16h-9z'}
 ];
-const def=()=>({name:'Ma cure vitalité',days:21,times:['08:00'],done:0,taken:0,xp:0,streak:0,best:0,lock:'',lastRemind:''});
+const def=()=>({pack:'energie',name:'Cure libre',days:60,times:{matin:'08:00',midi:'12:30',soir:'19:30'},link:'',done:0,taken:0,xp:0,streak:0,best:0,lock:''});
 let s;
 try{s=Object.assign(def(),JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(e){s=def()}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(s))}catch(e){}};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today=()=>new Date().toDateString();
-const perDay=()=>Math.max(1,s.times.length);
+const pack=()=>PACKS.find(p=>p.id===s.pack)||PACKS[0];
+const cureName=()=>pack().id==='libre'?s.name:pack().n;
+// liste des prises du jour, regroupées par moment
+const prises=()=>MOM.map(([k,l])=>({k,l,t:s.times[k],items:pack().items.filter(i=>PROD[i].m===k)})).filter(x=>x.items.length);
+const perDay=()=>prises().length;
 const locked=()=>s.lock===today()&&s.done<s.days;
 const rank=()=>RANKS.filter(r=>s.xp>=r[0]).pop();
+const orderUrl=()=>s.link||(pack().url?SHOP+pack().url:'');
 
 function drawMap(){
   const m=$('map'),W=m.clientWidth,gap=92,top=60;
@@ -144,7 +182,7 @@ function drawMap(){
   for(let i=0;i<s.days;i++)pts.push([W/2+Math.sin(i*0.85)*Math.min(W*0.3,170),top+i*gap]);
   const H=top*2+(s.days-1)*gap;
   const svg=$('path');svg.setAttribute('height',H);svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.style.height=H+'px';
-  let d=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1]).join(' ');
+  const d=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1]).join(' ');
   svg.innerHTML=`<path d="${d}" fill="none" stroke="var(--path)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 22"/>`;
   m.querySelectorAll('.node').forEach(n=>n.remove());
   m.insertAdjacentHTML('beforeend',pts.map((p,i)=>{
@@ -159,31 +197,44 @@ function drawMap(){
 }
 const ro=new ResizeObserver(drawMap);ro.observe($('map'));
 
+function renderSettings(){
+  $('pPack').innerHTML=PACKS.map(p=>`<option value="${p.id}" ${p.id===s.pack?'selected':''}>${esc(p.n)}${p.id!=='libre'?' · '+p.days+' jours':''}</option>`).join('');
+  const p=pack();
+  $('pItems').innerHTML=p.items.map(i=>`<li><b>${esc(PROD[i].n)}</b>${esc(PROD[i].d)}</li>`).join('')+(p.price?`<li>Cure d'environ ${p.days} jours · ${esc(p.price)}</li>`:'');
+  $('customBox').style.display=p.id==='libre'?'block':'none';
+  $('pName').value=s.name;$('pDays').value=s.days;
+  $('pTimes').innerHTML=prises().map(x=>`<div class="tline"><label for="t_${x.k}">${esc(x.l)}</label><input type="time" id="t_${x.k}" value="${esc(x.t)}"></div>`).join('');
+  $('pLink').value=s.link;
+}
+
 function render(){
-  $('title').textContent=s.name;
-  $('subtitle').textContent=`${s.days} niveaux · ${perDay()} prise${perDay()>1?'s':''} par jour à ${s.times.join(', ')}`;
+  $('title').textContent=cureName();
+  $('subtitle').textContent=`${s.days} niveaux · ${perDay()} prise${perDay()>1?'s':''} par jour`;
   $('lvl').textContent=Math.min(s.done+1,s.days)+'/'+s.days;
   $('streak').textContent=s.streak;
   const r=rank(),nx=RANKS.find(x=>x[0]>s.xp);
   $('xpTxt').textContent=s.xp+' XP';$('rank').textContent=r[1];
   $('xpBar').style.width=(nx?((s.xp-r[0])/(nx[0]-r[0]))*100:100)+'%';
-  $('dots').innerHTML=Array.from({length:perDay()},(_,i)=>`<i class="${i<s.taken?'on':''}"></i>`).join('');
-  const b=$('take'),msg=$('msg');
-  if(s.done>=s.days){b.disabled=true;b.textContent='Cure terminée !';msg.textContent='Tu as battu le boss final.'}
-  else if(locked()){b.disabled=true;b.textContent='Niveau validé ✓';msg.textContent='Reviens demain pour le niveau '+(s.done+1)+'.'}
-  else{b.disabled=false;b.textContent=perDay()>1?`J'ai pris ma dose (${s.taken+1}/${perDay()})`:"J'ai pris ma dose";
+  $('dots').innerHTML=prises().map((_,i)=>`<i class="${i<s.taken?'on':''}"></i>`).join('');
+  const b=$('take'),msg=$('msg'),pr=$('prise');
+  if(s.done>=s.days){b.disabled=true;b.textContent='Cure terminée !';msg.textContent='Tu as battu le boss final.';pr.style.display='none'}
+  else if(locked()){b.disabled=true;b.textContent='Niveau validé ✓';msg.textContent='Reviens demain pour le niveau '+(s.done+1)+'.';pr.style.display='none'}
+  else{
+    const x=prises()[s.taken];pr.style.display='block';
+    pr.innerHTML=`<strong>${esc(x.l)} · ${esc(x.t)}</strong>`+x.items.map(i=>`${esc(PROD[i].n)} : ${esc(PROD[i].d)}`).join('<br>');
+    b.disabled=false;b.textContent=perDay()>1?`C'est pris (${s.taken+1}/${perDay()})`:"C'est pris";
     const left=s.days-s.done;
-    msg.textContent=left<=5?`Plus que ${left} niveau${left>1?'x':''} : pense à recommander ta prochaine cure.`:'Valide ta prise pour passer le niveau.'}
+    msg.textContent=left<=5?`Plus que ${left} niveau${left>1?'x':''} : pense à recommander ta prochaine cure.`:'Valide ta prise pour avancer.'}
   const st={done:s.done,best:s.best,days:s.days,xp:s.xp};
   $('badges').innerHTML=BADGES.map(x=>`<div class="badge ${x.c(st)?'on':''}"><svg viewBox="0 0 34 34"><path d="${x.p}" fill="${x.c(st)?'#ff5a5f':'currentColor'}"/></svg>${x.t}</div>`).join('');
-  $('pName').value=s.name;$('pDays').value=s.days;$('pTimes').value=s.times.join(', ');
-  drawMap();checkRemind();
+  renderSettings();drawMap();checkRemind();
 }
 
-function modal(title,txt,btns){
+function modal(title,txt,btns,link){
   $('mTitle').textContent=title;$('mTxt').textContent=txt;
-  $('mRow').innerHTML=btns.map((b,i)=>`<button data-i="${i}" class="${i===0?'big':''}">${esc(b[0])}</button>`).join('');
-  $('mRow').querySelectorAll('button').forEach(el=>el.onclick=()=>{$('modal').classList.remove('show');btns[+el.dataset.i][1]&&btns[+el.dataset.i][1]()});
+  $('mRow').innerHTML=btns.map((b,i)=>`<button data-i="${i}" class="${i===0&&!link?'big':''}">${esc(b[0])}</button>`).join('');
+  $('mLink').innerHTML=link?`<a class="order" href="${esc(link)}" target="_blank" rel="noopener">Commander : ${esc(cureName())}</a>`:'';
+  $('mRow').querySelectorAll('button').forEach(el=>el.onclick=()=>{$('modal').classList.remove('show');const f=btns[+el.dataset.i][1];f&&f()});
   $('modal').classList.add('show');
 }
 
@@ -194,41 +245,41 @@ function take(){
     s.taken=0;s.done++;s.streak++;s.best=Math.max(s.best,s.streak);
     const bonus=s.streak%7===0?50:20;s.xp+=bonus;s.lock=today();
     save();render();
+    const left=s.days-s.done,url=orderUrl();
     if(s.done>=s.days){
-      modal('Boss vaincu !',`Tu as terminé tes ${s.days} jours de ${s.name}. Prêt pour la saison 2 ?`,[
-        ['Commander ma prochaine cure',()=>modal('Bientôt ici','Ce bouton ouvrira ta page de commande ou ton lien distributeur.',[['OK']])],
-        ['Plus tard']]);
+      modal('Boss vaincu !',`Tu as terminé tes ${s.days} jours de ${cureName()}. Prêt pour la saison 2 ?`,[['Plus tard']],url);
+    }else if(left===5){
+      modal('Niveau '+s.done+' validé !',`+${bonus+10} XP. Plus que 5 niveaux : commande ta prochaine cure maintenant pour ne pas casser ta série.`,[['Plus tard']],url);
     }else{
-      const left=s.days-s.done;
-      modal('Niveau '+s.done+' validé !',`+${bonus+10} XP. ${left<=5?'Plus que '+left+' niveaux avant la fin : pense à prévoir la suite.':'Rendez-vous demain pour le niveau '+(s.done+1)+'.'}`,[['Continuer']]);
+      modal('Niveau '+s.done+' validé !',`+${bonus+10} XP. Rendez-vous demain pour le niveau ${s.done+1}.`,[['Continuer']]);
     }
-  }else{save();render();$('msg').textContent='Dose enregistrée, encore '+(perDay()-s.taken)+' aujourd\'hui.'}
+  }else{save();render();$('msg').textContent='Prise enregistrée, encore '+(perDay()-s.taken)+' aujourd\'hui.'}
 }
 
 function checkRemind(){
-  const now=new Date(),hm=now.toTimeString().slice(0,5);
-  const due=s.times.slice(0,s.taken+1).filter(t=>t<=hm).length>s.taken;
-  const show=due&&!locked()&&s.done<s.days;
+  const hm=new Date().toTimeString().slice(0,5),x=prises()[s.taken];
+  const show=!!x&&x.t<=hm&&!locked()&&s.done<s.days;
   $('banner').classList.toggle('show',show);
-  if(show)$('bannerTxt').textContent=`C'est l'heure de ta prise (${s.times[s.taken]}) : le niveau ${s.done+1} t'attend !`;
+  if(show)$('bannerTxt').textContent=`C'est l'heure : ${x.items.map(i=>PROD[i].n).join(' + ')} (${x.t})`;
 }
 setInterval(checkRemind,30000);
 
 $('take').onclick=take;
 $('bannerBtn').onclick=take;
+$('pPack').onchange=()=>{const p=PACKS.find(x=>x.id===$('pPack').value);s.pack=p.id;s.days=p.id==='libre'?(parseInt($('pDays').value)||21):p.days;s.taken=0;s.done=Math.min(s.done,s.days);save();render();$('msg').textContent=p.n+' sélectionné.'};
 $('save').onclick=()=>{
-  s.name=$('pName').value.trim()||'Ma cure';
-  s.days=Math.min(120,Math.max(3,parseInt($('pDays').value)||21));
-  const t=$('pTimes').value.split(',').map(x=>x.trim()).filter(x=>/^\d{1,2}:\d{2}$/.test(x)).map(x=>x.padStart(5,'0')).sort();
-  s.times=t.length?t.slice(0,4):['08:00'];
-  s.taken=Math.min(s.taken,s.times.length-1);s.done=Math.min(s.done,s.days);
+  if(pack().id==='libre'){s.name=$('pName').value.trim()||'Cure libre';s.days=Math.min(120,Math.max(3,parseInt($('pDays').value)||21))}
+  prises().forEach(x=>{const v=$('t_'+x.k).value;if(/^\d{2}:\d{2}$/.test(v))s.times[x.k]=v});
+  const l=$('pLink').value.trim();s.link=/^https?:\/\//.test(l)?l:'';
+  s.done=Math.min(s.done,s.days);
   save();render();$('msg').textContent='Cure enregistrée.';
 };
-$('reset').onclick=()=>modal('Recommencer ?','Ta progression, tes XP et tes trophées repartent de zéro.',[['Oui, recommencer',()=>{const k={name:s.name,days:s.days,times:s.times};s=Object.assign(def(),k);save();render()}],['Annuler']]);
+$('reset').onclick=()=>modal('Recommencer ?','Ta progression, tes XP et tes trophées repartent de zéro.',[['Oui, recommencer',()=>{const k={pack:s.pack,name:s.name,days:s.days,times:s.times,link:s.link};s=Object.assign(def(),k);save();render()}],['Annuler']]);
 $('skip').onclick=()=>{
+  let note='';
   if(s.lock===today())s.lock='';
-  else if(s.taken<perDay()&&s.done<s.days){s.streak=0;s.taken=0;$('msg').textContent='Jour manqué : ta série repart à zéro.'}
-  save();render();
+  else if(s.done<s.days){s.streak=0;s.taken=0;note='Jour manqué : ta série repart à zéro.'}
+  save();render();if(note)$('msg').textContent=note;
 };
 render();
 }
