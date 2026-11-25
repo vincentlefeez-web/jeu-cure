@@ -74,6 +74,12 @@ select{width:100%;font:16px Nunito;padding:10px 12px;border-radius:12px;border:2
 .modal .panel{max-width:380px;text-align:center}
 .modal h2{font-size:30px}
 .burst{width:120px;height:120px;margin:0 auto}
+.play{background:var(--mint);color:#fff;box-shadow:0 5px 0 #1b8a6f;display:none}
+.play.show{display:block}
+.ttt{display:grid;grid-template-columns:repeat(3,minmax(0,84px));gap:8px;justify-content:center;margin:14px 0}
+.ttt button{aspect-ratio:1;min-height:0;padding:0;font:700 44px Fredoka;border-radius:16px;background:light-dark(#fff,#1d1430);box-shadow:inset 0 0 0 2px var(--path)}
+.ttt button.x{color:var(--coral)}.ttt button.o{color:var(--mint)}.ttt button.win{background:var(--bg)}
+#gModal .panel{max-width:360px;text-align:center}
 @media(max-width:600px){.grid{grid-template-columns:minmax(0,1fr)}.stat b{font-size:22px}.map{height:360px}}
 @media(prefers-reduced-motion:reduce){.node.now{animation:none}.map{scroll-behavior:auto}}
 </style>
@@ -98,6 +104,7 @@ select{width:100%;font:16px Nunito;padding:10px 12px;border-radius:12px;border:2
       <div class="prise" id="prise"></div>
       <div class="dots" id="dots"></div>
       <button class="big" id="take">J'ai pris ma dose</button>
+      <button class="big play" id="play">Jouer la partie du jour</button>
       <p class="msg" id="msg"></p>
     </div>
   </div>
@@ -118,6 +125,13 @@ select{width:100%;font:16px Nunito;padding:10px 12px;border-radius:12px;border:2
     </div>
   </div>
 </div>
+
+<div class="modal" id="gModal"><div class="panel">
+  <h2>Morpion du jour</h2>
+  <p id="gTxt">Tu joues les X. Aligne-en trois avant l'ordinateur.</p>
+  <div class="ttt" id="ttt"></div>
+  <div class="row" id="gRow"></div>
+</div></div>
 
 <div class="modal" id="modal"><div class="panel">
   <svg class="burst" viewBox="0 0 120 120" aria-hidden="true"><g fill="#ff5a5f">
@@ -158,9 +172,10 @@ const BADGES=[
   {t:'Semaine parfaite',c:s=>s.best>=7,p:'M8 6h18v6a9 9 0 0 1-18 0zM13 22h8v4h4v3H9v-3h4z'},
   {t:'Mi-parcours',c:s=>s.done>=Math.ceil(s.days/2),p:'M17 3a14 14 0 1 0 0 28 14 14 0 0 0 0-28zm0 3v22a11 11 0 0 1 0-22z'},
   {t:'Cure terminée',c:s=>s.done>=s.days,p:'M5 26l3-15 6 6 3-11 3 11 6-6 3 15z'},
-  {t:'500 XP',c:s=>s.xp>=500,p:'M19 3L7 19h9l-2 12 12-16h-9z'}
+  {t:'500 XP',c:s=>s.xp>=500,p:'M19 3L7 19h9l-2 12 12-16h-9z'},
+  {t:'Roi du morpion (5 victoires)',c:s=>s.wins>=5,p:'M6 6h22v22H6zM13 6v22M21 6v22M6 13h22M6 21h22'}
 ];
-const def=()=>({pack:'energie',name:'Cure libre',days:60,times:{matin:'08:00',midi:'12:30',soir:'19:30'},link:'',done:0,taken:0,xp:0,streak:0,best:0,lock:''});
+const def=()=>({pack:'energie',name:'Cure libre',days:60,times:{matin:'08:00',midi:'12:30',soir:'19:30'},link:'',done:0,taken:0,xp:0,streak:0,best:0,lock:'',game:false,wins:0});
 let s;
 try{s=Object.assign(def(),JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(e){s=def()}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(s))}catch(e){}};
@@ -225,7 +240,8 @@ function render(){
     b.disabled=false;b.textContent=perDay()>1?`C'est pris (${s.taken+1}/${perDay()})`:"C'est pris";
     const left=s.days-s.done;
     msg.textContent=left<=5?`Plus que ${left} niveau${left>1?'x':''} : pense à recommander ta prochaine cure.`:'Valide ta prise pour avancer.'}
-  const st={done:s.done,best:s.best,days:s.days,xp:s.xp};
+  $('play').classList.toggle('show',!!s.game);
+  const st={done:s.done,best:s.best,days:s.days,xp:s.xp,wins:s.wins};
   $('badges').innerHTML=BADGES.map(x=>`<div class="badge ${x.c(st)?'on':''}"><svg viewBox="0 0 34 34"><path d="${x.p}" fill="${x.c(st)?'#ff5a5f':'currentColor'}"/></svg>${x.t}</div>`).join('');
   renderSettings();drawMap();checkRemind();
 }
@@ -243,17 +259,59 @@ function take(){
   s.taken++;s.xp+=10;
   if(s.taken>=perDay()){
     s.taken=0;s.done++;s.streak++;s.best=Math.max(s.best,s.streak);
-    const bonus=s.streak%7===0?50:20;s.xp+=bonus;s.lock=today();
+    const bonus=s.streak%7===0?50:20;s.xp+=bonus;s.lock=today();s.game=true;
     save();render();
     const left=s.days-s.done,url=orderUrl();
     if(s.done>=s.days){
-      modal('Boss vaincu !',`Tu as terminé tes ${s.days} jours de ${cureName()}. Prêt pour la saison 2 ?`,[['Plus tard']],url);
+      modal('Boss vaincu !',`Tu as terminé tes ${s.days} jours de ${cureName()}. Prêt pour la saison 2 ?`,[['Jouer au morpion',openGame],['Plus tard']],url);
     }else if(left===5){
-      modal('Niveau '+s.done+' validé !',`+${bonus+10} XP. Plus que 5 niveaux : commande ta prochaine cure maintenant pour ne pas casser ta série.`,[['Plus tard']],url);
+      modal('Niveau '+s.done+' validé !',`+${bonus+10} XP. Plus que 5 niveaux : commande ta prochaine cure maintenant pour ne pas casser ta série.`,[['Jouer au morpion',openGame],['Plus tard']],url);
     }else{
-      modal('Niveau '+s.done+' validé !',`+${bonus+10} XP. Rendez-vous demain pour le niveau ${s.done+1}.`,[['Continuer']]);
+      modal('Niveau '+s.done+' validé !',`+${bonus+10} XP. Rendez-vous demain pour le niveau ${s.done+1}.`,[['Jouer au morpion',openGame],['Plus tard']]);
     }
   }else{save();render();$('msg').textContent='Prise enregistrée, encore '+(perDay()-s.taken)+' aujourd\'hui.'}
+}
+
+// ---- Morpion : une partie débloquée par niveau validé
+const LINES=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+let g=[],gOver=false;
+const winner=b=>{for(const l of LINES){const[a,c,d]=l;if(b[a]&&b[a]===b[c]&&b[a]===b[d])return{p:b[a],l}}return b.every(Boolean)?{p:'nul',l:[]}:null};
+function aiMove(){
+  const free=g.map((v,i)=>v?null:i).filter(i=>i!==null);
+  const find=p=>free.find(i=>{const t=g.slice();t[i]=p;return winner(t)?.p===p});
+  if(Math.random()<0.25)return free[Math.floor(Math.random()*free.length)]; // l'ordinateur se trompe parfois
+  for(const p of ['O','X']){const i=find(p);if(i!==undefined)return i}
+  if(!g[4])return 4;
+  const c=[0,2,6,8].filter(i=>!g[i]);
+  return c.length?c[Math.floor(Math.random()*c.length)]:free[0];
+}
+function drawGame(res){
+  $('ttt').innerHTML=g.map((v,i)=>`<button data-i="${i}" class="${v==='X'?'x':v==='O'?'o':''} ${res&&res.l.includes(i)?'win':''}" aria-label="Case ${i+1}">${v||''}</button>`).join('');
+  $('ttt').querySelectorAll('button').forEach(el=>el.onclick=()=>play(+el.dataset.i));
+}
+function endGame(res){
+  gOver=true;s.game=false;
+  let t;
+  if(res.p==='X'){s.wins++;s.xp+=30;t='Gagné ! +30 XP.'}
+  else if(res.p==='nul'){s.xp+=10;t='Match nul. +10 XP.'}
+  else t="L'ordinateur gagne cette fois. Revanche demain, au prochain niveau !";
+  save();render();drawGame(res);$('gTxt').textContent=t;
+  $('gRow').innerHTML='<button class="big" id="gClose">Retour à la carte</button>';
+  $('gClose').onclick=()=>$('gModal').classList.remove('show');
+}
+function play(i){
+  if(gOver||g[i])return;
+  g[i]='X';let r=winner(g);if(r)return endGame(r);
+  g[aiMove()]='O';r=winner(g);if(r)return endGame(r);
+  drawGame();
+}
+function openGame(){
+  if(!s.game)return;
+  g=Array(9).fill('');gOver=false;
+  $('gTxt').textContent="Tu joues les X. Aligne-en trois avant l'ordinateur.";
+  $('gRow').innerHTML='<button id="gLater">Plus tard</button>';
+  $('gLater').onclick=()=>$('gModal').classList.remove('show');
+  drawGame();$('gModal').classList.add('show');
 }
 
 function checkRemind(){
@@ -265,6 +323,7 @@ function checkRemind(){
 setInterval(checkRemind,30000);
 
 $('take').onclick=take;
+$('play').onclick=openGame;
 $('bannerBtn').onclick=take;
 $('pPack').onchange=()=>{const p=PACKS.find(x=>x.id===$('pPack').value);s.pack=p.id;s.days=p.id==='libre'?(parseInt($('pDays').value)||21):p.days;s.taken=0;s.done=Math.min(s.done,s.days);save();render();$('msg').textContent=p.n+' sélectionné.'};
 $('save').onclick=()=>{
